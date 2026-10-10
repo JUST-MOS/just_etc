@@ -1,0 +1,343 @@
+This is an exposure time calculator for JUST, adapted from the original C code by Chris Hiaratas. A comprehensive PDF manual from Chris Hiaratas is included in the same directory, detailing the code's functions and usage.
+
+1. Compilation of the code
+
+Under the directory ETC-JUST, type “make” within the directory. This will compile the c code under /src. (Qinghui: please recompile using your own machine to make gcc work)
+
+The code is made up of a standalone C file (gsetc.c, gsetc_omp.c) and a header file (modeldata.h) that contains information about atmospheric models, such as tables of OH lines. 
+
+The two codes work in similar ways, just that gsetc_omp.c works under the -DHGCDTE_SUTR and −DMOONLIGHT_ mode:
+
+-DHGCDTE_SUTR: Switches the sampling options on the HgCdTe detectors to sample up the ramp. We are likely to actually use this option in practice; it reduces overheads but at the expense of enhanced Poisson noise.
+
+−DMOONLIGHT_: Enables Moonlight (if not set, it assumes dark time).
+
+The compiler options used are displayed at runtime before any prompts.
+
+2. Preparation of Files
+
+Before executing the code, we need to prepare a configuration file specifically for JUST. A galaxy catalogue file can also be prepared if [O II] emission line needs to be measured, but is optional.
+
+A. Configuration File
+
+A sample Configuration File for JUST (called spec.dat under the same directory):
+
+# JUST Configuration File
+# 2024 Dec 30 : throughput : spec
+#
+OPTICS 4.4 0.41 0.60 26.5 26.5 26.5 26.5 26.5
+SPOT 19.1 20.9 24.4 27.8 31.3
+VIGNET 0.85 0.84 0.83 0.81 0.79
+FIBER 87.5
+ARMS 3
+MEDIUM_RESOLUTION 0
+PARAM 0 365 560 4096 7
+PARAM 1 540 745 4096 7
+PARAM 2 720 925 4096 7
+CAMERA 0 1.55  16 15.0 173 32.0 175.0 2.0e-4 4 100
+CAMERA 1 1.55  16 15.0 173 32.0 175.0 1.0e-4 4 100
+CAMERA 2 1.55  40 15.0 100 32.0 175.0 0.01   4 100
+THRPUT
+ 365.0  0.1030  1.0000  1.0000  1.0000  1.0000  0.1030
+ 375.0  0.1400  1.0000  1.0000  1.0000  1.0000  0.1400
+ 385.0  0.1760  1.0000  1.0000  1.0000  1.0000  0.1760
+ 395.0  0.2020  1.0000  1.0000  1.0000  1.0000  0.2020
+ 405.0  0.2220  1.0000  1.0000  1.0000  1.0000  0.2220
+ 415.0  0.2530  1.0000  1.0000  1.0000  1.0000  0.2530
+ 425.0  0.2700  1.0000  1.0000  1.0000  1.0000  0.2700
+ 435.0  0.2900  1.0000  1.0000  1.0000  1.0000  0.2900
+ 445.0  0.2960  1.0000  1.0000  1.0000  1.0000  0.2960
+ 455.0  0.3030  1.0000  1.0000  1.0000  1.0000  0.3030
+ 465.0  0.3060  1.0000  1.0000  1.0000  1.0000  0.3060
+ 475.0  0.3030  1.0000  1.0000  1.0000  1.0000  0.3030
+ 485.0  0.3040  1.0000  1.0000  1.0000  1.0000  0.3040
+ 495.0  0.3010  1.0000  1.0000  1.0000  1.0000  0.3010
+ 505.0  0.3000  1.0000  1.0000  1.0000  1.0000  0.3000
+ 515.0  0.3000  1.0000  1.0000  1.0000  1.0000  0.3000
+ 525.0  0.3000  1.0000  1.0000  1.0000  1.0000  0.3000
+ 535.0  0.3010  1.0000  1.0000  1.0000  1.0000  0.3010
+ 545.0  0.3010  1.0000  1.0000  1.0000  1.0000  0.3010
+ 555.0  0.2980  1.0000  1.0000  1.0000  1.0000  0.2980
+ 565.0  0.2890  1.0000  1.0000  1.0000  1.0000  0.2890
+D
+ 535.0  0.3340  1.0000  1.0000  1.0000  1.0000  0.3340
+ 545.0  0.3380  1.0000  1.0000  1.0000  1.0000  0.3380
+ 555.0  0.3390  1.0000  1.0000  1.0000  1.0000  0.3390
+ 565.0  0.3330  1.0000  1.0000  1.0000  1.0000  0.3330
+ 575.0  0.3150  1.0000  1.0000  1.0000  1.0000  0.3150
+ 585.0  0.3180  1.0000  1.0000  1.0000  1.0000  0.3180
+ 595.0  0.3210  1.0000  1.0000  1.0000  1.0000  0.3210
+ 605.0  0.3300  1.0000  1.0000  1.0000  1.0000  0.3300
+ 615.0  0.3320  1.0000  1.0000  1.0000  1.0000  0.3320
+ 625.0  0.3340  1.0000  1.0000  1.0000  1.0000  0.3340
+ 635.0  0.3360  1.0000  1.0000  1.0000  1.0000  0.3360
+ 645.0  0.3370  1.0000  1.0000  1.0000  1.0000  0.3370
+ 655.0  0.3360  1.0000  1.0000  1.0000  1.0000  0.3360
+ 665.0  0.3380  1.0000  1.0000  1.0000  1.0000  0.3380
+ 675.0  0.3340  1.0000  1.0000  1.0000  1.0000  0.3340
+ 685.0  0.3300  1.0000  1.0000  1.0000  1.0000  0.3300
+ 695.0  0.3240  1.0000  1.0000  1.0000  1.0000  0.3240
+ 705.0  0.3110  1.0000  1.0000  1.0000  1.0000  0.3110
+ 715.0  0.3090  1.0000  1.0000  1.0000  1.0000  0.3090
+ 725.0  0.3020  1.0000  1.0000  1.0000  1.0000  0.3020
+ 735.0  0.2860  1.0000  1.0000  1.0000  1.0000  0.2860
+ 745.0  0.2770  1.0000  1.0000  1.0000  1.0000  0.2770
+D
+ 715.0  0.3190  1.0000  1.0000  1.0000  1.0000  0.3190
+ 725.0  0.3180  1.0000  1.0000  1.0000  1.0000  0.3180
+ 735.0  0.3100  1.0000  1.0000  1.0000  1.0000  0.3100
+ 745.0  0.3070  1.0000  1.0000  1.0000  1.0000  0.3070
+ 755.0  0.3080  1.0000  1.0000  1.0000  1.0000  0.3080
+ 765.0  0.3250  1.0000  1.0000  1.0000  1.0000  0.3250
+ 775.0  0.3420  1.0000  1.0000  1.0000  1.0000  0.3420
+ 785.0  0.3460  1.0000  1.0000  1.0000  1.0000  0.3460
+ 795.0  0.3470  1.0000  1.0000  1.0000  1.0000  0.3470
+ 805.0  0.3520  1.0000  1.0000  1.0000  1.0000  0.3520
+ 815.0  0.3560  1.0000  1.0000  1.0000  1.0000  0.3560
+ 825.0  0.3570  1.0000  1.0000  1.0000  1.0000  0.3570
+ 835.0  0.3600  1.0000  1.0000  1.0000  1.0000  0.3600
+ 845.0  0.3570  1.0000  1.0000  1.0000  1.0000  0.3570
+ 855.0  0.3620  1.0000  1.0000  1.0000  1.0000  0.3620
+ 865.0  0.3650  1.0000  1.0000  1.0000  1.0000  0.3650
+ 875.0  0.3680  1.0000  1.0000  1.0000  1.0000  0.3680
+ 885.0  0.3670  1.0000  1.0000  1.0000  1.0000  0.3670
+ 895.0  0.3700  1.0000  1.0000  1.0000  1.0000  0.3700
+ 905.0  0.3830  1.0000  1.0000  1.0000  1.0000  0.3830
+ 915.0  0.3770  1.0000  1.0000  1.0000  1.0000  0.3770
+ 925.0  0.3750  1.0000  1.0000  1.0000  1.0000  0.3750
+D
+
+
+The keywords are: 
+
+• OPTICS (required): 
+This is followed by 4 numbers: 
+i. The outer diameter of the telescope (in meters). 
+    -- For JUST, 4.4m
+ii. The linear central obscuration fraction (dimensionless, <1).
+    -- The obscuration is about 1.8m for JUST, fraction is 1.8/4.4 = 0.41
+iii. The radius of the FOV (in degrees). 
+    -- 0.6 degrees for JUST
+iv. The EFL (in meters) at the center of the field. (check on the program)
+-- The effective focal length is computed by multiplying the diameter of the telescope by the focal ratio. For JUST, 4.82×5.5=26.5m.
+ 
+
+v. The EFL (in meters) at a field angle of ¼ of the radius. 
+    -- The focal ratio may vary slightly from the center to the outer radius, but since we do not have that information at the moment, we adopt 26.5m throughout.
+vi. The EFL (in meters) at a field angle of ½ of the radius. 
+    -- Same, 26.5m
+vii. The EFL (in meters) at a field angle of ¾ of the radius. 
+    -- Same, 26.5m
+viii. The EFL (in meters) at the edge of the field. 
+    -- Same, 26.5m
+
+• SPOT (required): This is the geometric spot size delivered by the telescope + corrector, in μm RMS per axis. The spot size is specified at five positions linearly spaced from the center to the edge of the FOV. （白华老师提供的）
+    -- 19.1 20.9 24.4 27.8 31.3 (interpolated from the spot diagram given by 白华)
+• VIGNET (optional): The vignetting factor (1 for no vignetting, 0 for complete obscuration), specified at five positions linearly spaced from the center to the edge of the FOV. （白华老师提供的）
+-- 0.85 0.84 0.83 0.81 0.79
+
+• FIBER (required): The apparent fiber radius in μm. This is divided by the EFL in m to obtain the fiber radius in μrad projected onto the sky. Therefore, in the case where the fiber input contains a lens, this should be the apparent fiber radius as seen by someone looking down on the focal plane, rather than the physical radius of the fiber core. 
+-- The apparent fiber radius for JUST is 87.5 um, as the fiber core size is 175 um from the above picture.
+
+• ARMS (required): The number of arms in the spectrograph. 
+-- For now, we are using three arms, with each arm covering a different wavelength range.
+
+• PARAM (one required per arm): This is followed by 5 numbers: 
+i. The index of the spectrograph arm to which the parameters should be applied.
+-- For the three arms, they are indexed as 0, 1, 2
+ii. The minimum wavelength of the arm in nm (vacuum).
+    -- The legal range of Si CCDs in air is currently between 200 nm and 1100 nm. (enough for JUST) The code later converts vacuum wavelengths to air wavelengths. If the input wavelength falls outside this range, the code generates the error message: "Error: Si data out of range."
+
+iii. The maximum wavelength of the arm in nm (vacuum).
+iv. The number of pixels in the dispersion direction between λmin and λmax.
+-- For now 4096 pixels.
+v. The (integer) width of the trace in pixels that is co-added to produce a 1D spectrum.
+-- Assume 7 for now.（asked 顾一舟）
+
+• CAMERA (one required per arm): This is followed by 10 numbers: 
+i. The index of the spectrograph arm to which the parameters should be applied. 
+    -- Three arms indexed 0, 1, 2
+ii. The f/ratio of the camera. 
+    -- adopted 1.55
+iii. The thickness of the detector in μm. 
+    -- Standard silicon has a nominal active thickness of 16 μm. DD is Deep Depletion silicon with a higher resistivity and a nominal active thickness of 40 μm. For arm 0 & 1, the thichness is 16; for arm 2, the thickness is 40.
+iv. The pixel scale of the detector in μm pixel−1. 
+-- adopted 15 for all three arms
+v. The detector temperature in K. 
+    -- For arm 0 & 1, the detector temperature is 173 K; for arm2, is 100 K.
+vi. The image quality of the spectrograph in μm RMS per axis. 
+    -- adopted 32 given the spot size doubles that of PFS
+vii. The fiber diameter projected onto the focal plane in μm. 
+    -- （1.36“x128 ～175 micron)
+viii. The dark current in e− pixel−1 s−1. 
+    -- e2v CCD standard
+ix. The read noise in e− RMS per exposure. 
+    -- Adopt 4 e− RMS per exposure, e2v CCD standard
+x. The separation of adjacent spectral traces in μm on the detector.
+-- Same as PFS
+
+THRPUT (required): A throughput table for each arm. The table rows are each given by λ (in nm vacuum), and five numbers that are multiplied together to form the total throughput. 
+The five numbers are the telescope + corrector, fiber system, spectrograph optics, grating × dichroic, and detector.
+However, since they are multiplied before any other operations, a throughput term can be assigned to any one of the columns.
+The 7th column, which represents the total throughput, is not read by the code and is just included in the input for user reference. The code only multiplies the first five columns (throughput-related parameters) and uses them for further calculations. The tables for consecutive arms are delimited by a single line containing the 'D' character.
+
+B. Galaxy catalog file
+
+The galaxy catalog file is simply a list of galaxies. The ETC runs through the input catalog and determines for each object whether the [O II] doublet would be detected under the specified observational conditions.
+
+A sample galaxy_catalog.dat file is included in the same directory. Note that the number of galaxies is not specified – it is simply the line count. The columns are:
+I. An identification number for each galaxy.
+II. The redshift zzz.
+III. The effective radius reff in arcsec.
+IV. The [O II] line ratio, F3727/F3730F_{3727}/F_{3730}F3727/F3730. (Atomic physics constrains this to be between the low-density limit of 0.667 and the high-density limit of 3.87. If the specified ratio is outside this range, it is replaced with the nearest legal value.)
+V. The observer-frame [O II] doublet flux, in erg cm^{-2}s^{-1}.
+VI. The observer-frame underlying continuum, in erg cm^{-2}s^{-1} Hz^{-1} (for a 22.5 mag AB galaxy, this flux is 3.631×10^{-29}erg cm^{-2}s^{-1}Hz^{-1}).
+VII. The 1σ line width in Å observer-frame, taken to be a Gaussian. 
+
+3. Running the code
+
+The code can be called from the command line. A sample run is as follows:
+
+(base) qingsun@Qinghuis-MacBook-Pro src % ./gsetc_omp.x
+Compiler flags: -DHGCDTE_SUTR -DMOONLIGHT_
+Enter spectrograph configuration file: spec.dat
+Enter degrade number (0-1): 1
+Enter observational conditions [hexadecimal code; suggested=11005]: 11005
+Enter seeing [arcsec FWHM @ lambda=800nm]: 0.8
+Enter zenith angle [degrees]: 45
+Enter Galactic dust column [magnitudes E(B-V)]: 0.03
+Enter field angle [degrees]: 0.675
+Enter fiber astrometric offset [arcsec]: 0.03
+Enter Moonlight conditions:
+  Angle (Moon-Zenith) [deg]: 30
+  Angle (Moon-target) [deg]: 60
+  Lunar phase [0=New, 0.25=quarter, 0.5=full]: 0
+Enter time per exposure [s]: 450
+Enter number of exposures: 8
+Enter systematic sky subtraction floor [rms per 1D pixel]: 0
+Enter diffuse stray light [fraction of total]: 0
+Noise data reused?: [1=yes/0=no] 0
+Enter output file for noise vector: out/ref.noise.dat
+Enter output file for ELG S/N curve: [- for no ELG S/N curve output] -
+Enter output file for ELG S/N curve2: [- for no ELG S/N curve2 output] -
+Enter flux of the emission line [erg cm-2 s-1]: 1.0e-17
+Enter velocity width of the emission line [km s-1]: 70
+Enter output file for continuum curve: [- for no continuum S/N curve output] out/ref.snc.dat
+Enter [OII] input catalogue file: [- for no OII computation] galaxy_catalog.dat (A sample file is included, can be “-“)
+Enter [OII] output catalogue file: [- for no OII computation] out/ref.snl.dat (a sample output file is included under out/, can be “-“ if no output file)
+Enter minimum SNR: 9
+Enter magnitude input file: [- for no designated file] MAGFILE.dat (sample magnitude file, the file can be any number of lines)
+Enter the effective radius of the galaxy [arcsec]: 
+0.3
+Fiber aperture factor [@800nm, r_eff=0.30"(exp)] = 0.81316873
+Fiber aperture factor [@800nm,     point source] = 0.88420717
+(1/3) Computing noise vector ...
+ //Arm0//
+  --> Computing Sky Lines Contribution ...
+  --> Computing Sky Continuum Contribution ...
+  --> Computing Sky Systematic Error Contribution ...
+ //Arm1//
+  --> Computing Sky Lines Contribution ...
+  --> Computing Sky Continuum Contribution ...
+  --> Computing Sky Systematic Error Contribution ...
+ //Arm2//
+  --> Computing Sky Lines Contribution ...
+  --> Computing Sky Continuum Contribution ...
+  --> Computing Sky Systematic Error Contribution ...
+ --> Done.
+(2/3) Computing SNR curve for continuum ...
+
+ --> Done.
+(3/3) Processing [OII] emitter catalog ...
+ Done.
+
+ NUMBER OF AVAILABLE TARGETS:       1
+[i.e. objects where OII detected *if* targeted]
+
+ zmin  zmax  ngal
+ 0.100 0.200       0
+ 0.200 0.300       0
+ 0.300 0.400       0
+ 0.400 0.500       0
+ 0.500 0.600       0
+ 0.600 0.700       0
+ 0.700 0.800       0
+ 0.800 0.900       0
+ 0.900 1.000       0
+ 1.000 1.100       0
+ 1.100 1.200       0
+ 1.200 1.300       1
+ 1.300 1.400       0
+ 1.400 1.500       0
+ 1.500 1.600       0
+ 1.600 1.700       0
+ 1.700 1.800       0
+ 1.800 1.900       0
+ 1.900 2.000       0
+ 2.000 2.100       0
+ 2.100 2.200       0
+ 2.200 2.300       0
+ 2.300 2.400       0
+ 2.400 2.500       0
+
+The code first displays any compiler flags that were enabled (in this case, -DHGCDTE_SUTR and -DMOONLIGHT_). It then prompts the user for any inputs not specified in the configuration file. These inputs are as follows:
+•	The spectrograph configuration file, which contains all the constant hardware parameters
+•	The observational conditions assumption, which is represented by a 5-digit hexadecimal number (Default value is fine). The digits, in order, correspond to:
+o	The sky emission line model.
+o	The atmospheric line absorption model.
+o	The atmospheric continuum absorption model.
+o	The Moonlight model.
+o	The sky continuum model.
+•	Other observing parameters – seeing, zenith angle, Galactic dust column, field angle, fiber astrometric offset, and observing time (including the number of exposures).
+•	Systematic sky subtraction error as a fraction (e.g. 0.01 implements a systematic error floor of 1% of the sky in each 1D pixel in the stacked exposure; needs further information). This error is assumed uncorrelated; if the true error is correlated, a larger number should be set by multiplying the number of 1D pixels covering the correlation length by its square root.
+•	Diffuse stray light takes a fraction of the radiation incident on the detector and spreads it uniformly across the entire 2D detector surface (needs further information). This can be very significant, even at low levels in the NIR, where the OH lines (if smeared out) are ~100 times brighter than the continuum.
+•	If the −DMOONLIGHT_ flag is set, the code will prompt the user for lunar parameters (otherwise dark time is assumed). These include:
+o	Moon-zenith angle [deg] – this is 0 when the Moon is at the top of the sky and 90 when the Moon is on the horizon. For values >90, the Moonlight is taken to be zero, and the calculation is equivalent to dark time.
+o	Moon-target angle [deg] – this is 0 if the Moon is within the observation field.
+o	Lunar phase – 0 for new Moon, ¼ for first quarter, ½ for full Moon, ¾ for last quarter, and 1 again for new Moon.
+•	Files for various outputs – In most cases, a “−” indicates that an output should be skipped (e.g., continuum S/N may not be of interest for an ELG program).
+o	Noise vector – noise variance in electrons squared per 1D pixel (e^2 pix^{−1}) in each arm.
+o	S/N curve for the [O II] doublet as a function of redshift (for a reference case: flux = 10^{−16} erg cm^{−2}s^{−1}, effective radius = 0.3 arcsec, 1:1 line ratio, velocity width σ = 70 km s−1).
+o	Continuum S/N per 1D pixel for a reference case (point source, 22.5 mag AB or equivalently Fν = 3.631 μJy).
+o	Set of galaxies from a given input catalog on which [O II] is detected.
+•	Minimum matched filter S/N at which one considers an [O II] detection successful.
+Before providing the output files, the code computes the fiber aperture factors, which refer to the fraction of light in the focal plane encircled by the fiber entrance. This calculation is done for both a typical galaxy (with an effective radius of 0.3 arcseconds, modeled as an exponential profile) and a point source.
+If the [O II] program is selected, a table is returned that includes the properties of the “successful” galaxies from the input catalog. These are galaxies that meet the criteria for detection, but success in practice requires the galaxy to be targeted, which is not currently a function of the ETC. However, the list of these successful galaxies can be cross-matched with the outputs from target selection to assess the efficiency and completeness of the target selection scheme.
+This output helps determine how well the selection criteria are performing in identifying galaxies that can be successfully targeted for further observation.
+To compare with PFS, I ran the code again using the PFS.spec.dat file as the input configuration file. The output file for PFS is out/PFS.noise.dat, out/PFS.snc.dat. (Qinghui: The S/N for JUST is higher than that from PFS under the same observing conditions, due to the significantly higher throughput values in our configuration file.)
+
+3. Output File
+
+Descriptions on the output file
+Each output file contains the following information:
+a. out/ref.noise.dat: noise variance per pixel
+•	(1) the spectrograph arm number
+•	(2) the pixel number
+•	(3) the vacuum wavelength in [nm]
+•	(4) the noise variance in [e^2/pix] (per one exposure without contribution from object continuum)
+•	(5) the sky background in [e]
+Note: (4) the noise variance in this table does not include the contribution from the object continuum.
+b. out/ref.snc.dat: S/N of continuum per pixel
+•	(1) the spectrograph arm number
+•	(2) the pixel number
+•	(3) the vacuum wavelength in [nm]
+•	(4) the continuum S/N per pixel
+•	(5) the signal in one exposure in [e]
+•	(6) the noise variance in [e^2/pix] (per one exposure without contribution from object continuum)
+•	(7) the noise variance in [e^2/pix] (per one exposure with contribution from object continuum)
+•	(8) the input spectra in [ABmag]
+•	(9) the conversion factor from flux density [erg/s/cm2/Hz] to [e]
+•	(10) the sampling factor
+•	(11) the sky background in [e]
+Note: the noise variance in this table includes the contribution from the object continuum.
+c. out/ref.snl.dat: S/N of emission line
+•	(1) the vacuum wavelength in [nm]
+•	(2) the fiber aperture factor
+•	(3) the effective collecting area [m^2]
+•	(4) the emission line S/N in blue arm
+•	(5) the emission line S/N in red arm
+•	(6) the emission line S/N in NIR arm
+•	(7) the emission line S/N in total
+Some caution:
+1.	NOISE_REUSED option is only valid for the same condition (zenith angle, field angle, lunar condition, and exposure time). Please be careful when you use this option and DO NOT use the different values from those used when the noise file was created.
+2.	You can input your own spectra by using MAG_FILE option, but please note that ETC does not convolve the instrument resolution to the input spectrum internally, so the resolution should be considered in the input spectrum in advance. Also note that the wavelength sampling should be larger than the pixel sampling of the PFS detector (~0.7A, ~0.8A, and ~0.8A for blue, red, and NIR arm, respectively).
