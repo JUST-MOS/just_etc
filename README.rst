@@ -14,7 +14,7 @@ Matplotlib versions. A current Python environment is recommended for new install
 
 .. code-block:: bash
 
-    git clone https://github.com/RainW7/just_etc.git
+    git clone https://https://github.com/JUST-MOS/just_etc.git
     cd just_etc
     python -m pip install .
     just-etc --help
