@@ -347,6 +347,15 @@ class JUSTExposureTimeCalculator:
             results.append((noise, sf))
         return results
 
+    def _source_atmospheric_transmission(self, obs, lambda_nm):
+        """Atmospheric transmission of an astronomical source at wavelength [nm].
+
+        The default is the existing ETC atmosphere. Research adapters may
+        override this hook with an explicitly documented source transmission;
+        it is separate from any ground-level sky-radiance calculation.
+        """
+        return ETC_py.gsAtmTrans(obs, lambda_nm, 0x0)
+
     @staticmethod
     def _flam_to_fnu_per_pixel(wave_nm, flux_flam_aa, dl_nm):
         """
@@ -383,7 +392,8 @@ class JUSTExposureTimeCalculator:
     # Public: SNR computation
     # ------------------------------------------------------------------
 
-    def compute_snr(self, wave_aa, flux_flam, t_exp, n_exp=1):
+    def compute_snr(self, wave_aa, flux_flam, t_exp, n_exp=1,
+                    galaxy_profile=None, offset_angle_deg=0.):
         """
         Compute continuum SNR for an arbitrary input spectrum.
 
@@ -398,6 +408,13 @@ class JUSTExposureTimeCalculator:
             Single-exposure time in seconds.
         n_exp : int
             Number of co-added exposures.
+        galaxy_profile : SersicProfile or None
+            Optional elliptical Sersic profile. Its radius replaces the
+            ``r_eff`` observing parameter for source coupling. None preserves
+            the original circular-exponential ETC calculation.
+        offset_angle_deg : float
+            Direction of the fiber miscentering relative to the profile's
+            major axis. Applied only when galaxy_profile is supplied.
 
         Returns
         -------
@@ -419,6 +436,17 @@ class JUSTExposureTimeCalculator:
         sp  = self._configure_spectro(n_exp)
         fa  = self._obs_params['field_angle']
         de  = self._obs_params['decenter']
+
+        geo_nodes = geo_values = None
+        if galaxy_profile is not None:
+            from .fiber_coupling import etc_fiber_fraction
+            # The PSF and aperture fraction vary smoothly with wavelength.
+            # Compute sparse nodes once, then interpolate on each native arm.
+            geo_nodes = np.linspace(min(sp.lmin[:sp.N_arms]),
+                                    max(sp.lmax[:sp.N_arms]), 21)
+            geo_values = etc_fiber_fraction(galaxy_profile, sp, obs, geo_nodes,
+                    decenter_arcsec=de, field_angle_deg=fa,
+                    offset_angle_deg=offset_angle_deg)
 
         noise_list = self._arm_noise(obs, t_exp)
 
@@ -449,14 +477,17 @@ class JUSTExposureTimeCalculator:
                 lambda_nm = arm_wave_nm[ipix]
 
                 # Atmospheric transmission at this pixel
-                atm = ETC_py.gsAtmTrans(obs, lambda_nm, 0x0)
+                atm = self._source_atmospheric_transmission(obs, lambda_nm)
 
                 # Galactic extinction
                 ext = 10.0 ** (-0.4 * ETC_py.gsGalactic_Alambda__EBV(lambda_nm) * obs.EBV)
 
                 # Geometric throughput
-                re  = self._obs_params.get('r_eff', 0.0)
-                geo = ETC_py.gsGeometricThroughput(sp, obs, lambda_nm, re, de, fa, 0x0)
+                if geo_values is None:
+                    re = self._obs_params.get('r_eff', 0.0)
+                    geo = ETC_py.gsGeometricThroughput(sp, obs, lambda_nm, re, de, fa, 0x0)
+                else:
+                    geo = np.interp(lambda_nm, geo_nodes, geo_values)
 
                 # Fraction of light in spectral trace
                 frac_trace = ETC_py.gsFracTrace(sp, obs, ia, lambda_nm, 0)
@@ -498,7 +529,8 @@ class JUSTExposureTimeCalculator:
     # Public: simulate mock observation (intrinsic vs noisy observed spectrum)
     # ------------------------------------------------------------------
 
-    def simulate_mock_observation(self, wave_aa, flux_flam, t_exp, n_exp=1, seed=None):
+    def simulate_mock_observation(self, wave_aa, flux_flam, t_exp, n_exp=1, seed=None,
+                                  galaxy_profile=None, offset_angle_deg=0.):
         """
         Simulate a mock 1D observed spectrum for JUST based on physical noise modeling.
 
@@ -514,6 +546,10 @@ class JUSTExposureTimeCalculator:
             Number of co-added exposures.
         seed : int or None, optional
             Random seed for reproducible noise realization.
+        galaxy_profile : SersicProfile or None
+            Optional elliptical galaxy profile for the fiber coupling.
+        offset_angle_deg : float
+            Direction of fiber miscentering relative to the major axis.
 
         Returns
         -------
@@ -526,7 +562,11 @@ class JUSTExposureTimeCalculator:
             noise_e        : ndarray — total noise standard deviation [e⁻]
             snr            : ndarray — per-pixel SNR
         """
-        results_snr = self.compute_snr(wave_aa, flux_flam, t_exp=t_exp, n_exp=n_exp)
+        if galaxy_profile is None:
+            results_snr = self.compute_snr(wave_aa, flux_flam, t_exp=t_exp, n_exp=n_exp)
+        else:
+            results_snr = self.compute_snr(wave_aa, flux_flam, t_exp=t_exp, n_exp=n_exp,
+                    galaxy_profile=galaxy_profile, offset_angle_deg=offset_angle_deg)
         rng = np.random.default_rng(seed)
 
         mock_results = []
@@ -574,7 +614,8 @@ class JUSTExposureTimeCalculator:
                             ref_wave_nm, n_exp=1,
                             t_exp_init=600.0,
                             t_exp_min=10.0, t_exp_max=86400.0,
-                            rtol=0.01, max_iter=12):
+                            rtol=0.01, max_iter=12, galaxy_profile=None,
+                            offset_angle_deg=0.):
         """
         Find the single-exposure time *t_exp* such that the continuum SNR
         at *ref_wave_nm* (after *n_exp* exposures) equals *target_snr*.
@@ -607,6 +648,10 @@ class JUSTExposureTimeCalculator:
             Relative tolerance on SNR convergence (default 1 %).
         max_iter : int
             Maximum number of ETC evaluations.
+        galaxy_profile : SersicProfile or None
+            Optional elliptical galaxy profile for the fiber coupling.
+        offset_angle_deg : float
+            Direction of fiber miscentering relative to the major axis.
 
         Returns
         -------
@@ -622,7 +667,11 @@ class JUSTExposureTimeCalculator:
 
         def _snr_at_t(t):
             """Return SNR at ref_wave_nm for a given t_exp."""
-            r = self.compute_snr(wave_aa, flux_flam, t_exp=t, n_exp=n_exp)
+            if galaxy_profile is None:
+                r = self.compute_snr(wave_aa, flux_flam, t_exp=t, n_exp=n_exp)
+            else:
+                r = self.compute_snr(wave_aa, flux_flam, t_exp=t, n_exp=n_exp,
+                        galaxy_profile=galaxy_profile, offset_angle_deg=offset_angle_deg)
             for arm_res in r:
                 wn = arm_res['wave_nm']
                 if wn[0] <= ref_wave_nm <= wn[-1]:

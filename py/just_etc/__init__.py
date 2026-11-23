@@ -5,7 +5,9 @@ from .just_etc_api import (
 )
 from .redrock import write_redrock_mock_spectrum
 from .spectral_library import convert_to_redrock_format
+from .fiber_coupling import SersicProfile, gaussian_fiber_fraction, etc_fiber_fraction
 
 __all__ = ["JUSTExposureTimeCalculator", "load_template", "list_templates",
            "normalize_to_mag", "write_redrock_mock_spectrum",
-           "convert_to_redrock_format", "__version__"]
+           "convert_to_redrock_format", "SersicProfile", "gaussian_fiber_fraction",
+           "etc_fiber_fraction", "__version__"]
