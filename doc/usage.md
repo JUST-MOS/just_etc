@@ -41,6 +41,63 @@ is `accurate`, whereas the CLI default is `fast`. The engine uses global calcula
 settings; avoid concurrently using different modes in threads. Batch examples use
 separate processes.
 
+## Optional elliptical Sérsic fiber coupling
+
+For a total-light input spectrum, a catalog profile can be used explicitly:
+
+```python
+from just_etc import SersicProfile
+
+# SHAPE_R is the half-light semi-major axis in arcsec; E1/E2 are Legacy
+# ellipticity components and n is the catalog Sérsic index.
+galaxy = SersicProfile(r_eff_arcsec=1.2, e1=0.25, e2=0.10, sersic_index=2.5)
+arms = etc.compute_snr(wave, flux, t_exp=900., n_exp=4,
+                       galaxy_profile=galaxy, offset_angle_deg=0.)
+```
+
+When supplied, `galaxy_profile` replaces the `r_eff` observing parameter for
+the source fiber coupling. The original circular exponential is retained when
+it is omitted. `offset_angle_deg` is the direction of the fiber miscentering
+relative to the galaxy's major axis; the default of 0 means along that axis.
+The same optional parameters are accepted by `simulate_mock_observation` and
+`solve_exposure_time`. The profile is assumed constant with wavelength; do not
+apply this coupling to a spectrum already normalized to fiber flux.
+
+The optional `gaussian_fiber_fraction` function provides a 1.5-arcsec aperture,
+1-arcsec Gaussian-seeing comparison with Legacy catalog fiber fluxes. This and
+the ETC PSF are model predictions, not on-sky calibration. They do not reproduce
+Legacy Tractor image rendering exactly, especially for concentrated galaxies.
+The JUST BGS study in `just_specsim` documents the sample validation.
+
+### Optional catalog-consistent Gaussian-mixture coupling
+
+For source profiles supplied as normalized elliptical Gaussian mixtures, an
+independent opt-in wrapper can compute the JUST ETC response and noise:
+
+```python
+from just_etc.mixture_fiber_coupling import GaussianMixtureProfile, compute_snr_with_mixture
+
+# Coefficients must be supplied by the caller from the appropriate catalog
+# model. Their values here are illustrative only, not Legacy coefficients.
+galaxy = GaussianMixtureProfile(r_eff_arcsec=1.2, e1=0.25, e2=0.10,
+                                amplitudes=[0.6, 0.4], variances=[0.2, 1.0])
+arms = compute_snr_with_mixture(etc, wave, flux, t_exp=900., n_exp=4,
+                                profile=galaxy, offset_angle_deg=0.)
+```
+
+The mixture's `variances` are dimensionless major-axis variances in units of
+`SHAPE_R**2`; zero variance represents a central point component. The input
+flux must describe total source light. The wrapper uses the existing ETC PSF
+and retains its sky and detector noise, replacing source coupling and its Poisson
+variance. It does not modify the default `compute_snr` path. Legacy's image
+pixelization is used only when reproducing its catalog aperture measurement;
+it is not applied to the continuous JUST fiber. The JUST BGS study in
+`just_specsim` documents the DR9.4 coefficients, comparison and scope.
+
+The packaged `data/DESI.spec.dat` is the historical 2019 DESI comparison
+configuration used in this research. Treat it as an engineering reference,
+not a verified current description of the DESI instrument.
+
 ## SNR and exposure time
 
 ```python
